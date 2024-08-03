@@ -33,7 +33,7 @@ use windows::{
   },
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY;
-use super::{native_monitor, native_window, EventListener, NativeMonitor, NativeWindow, SingleInstance, Key};
+use super::{native_monitor, native_window, EventListener, NativeMonitor, NativeWindow, SingleInstance};
 use crate::{common::Point, user_config::UserConfig};
 
 pub type WindowProcedure = WNDPROC;
@@ -156,9 +156,8 @@ impl Platform {
     })
   }
 
-  pub fn is_key_pressed(key: Key) -> bool {
-    let key: VIRTUAL_KEY = key.into(); 
-    let key_state = unsafe { GetAsyncKeyState(key.0 as i32) };
+  pub fn is_key_pressed(key: u16) -> bool {
+    let key_state = unsafe { GetAsyncKeyState(key as i32) };
     // Check if the most significant bit is set (indicating the key is
     // pressed)
     key_state as u16 & 0x8000 != 0
