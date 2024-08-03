@@ -6,6 +6,7 @@ mod native_window;
 mod platform;
 mod single_instance;
 mod window_event_hook;
+mod keys;
 
 pub use event_listener::*;
 pub use event_window::*;
@@ -15,3 +16,4 @@ pub use native_window::*;
 pub use platform::*;
 pub use single_instance::*;
 pub use window_event_hook::*;
+pub use keys::*;

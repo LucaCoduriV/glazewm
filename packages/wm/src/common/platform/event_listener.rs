@@ -48,7 +48,7 @@ impl EventListener {
     let event_window = EventWindow::new(
       event_tx,
       &config.value.keybindings,
-      config.value.general.focus_follows_cursor,
+      config.value.general.focus_follows_cursor || config.value.general.alt_snap,
     )?;
 
     Ok(Self {

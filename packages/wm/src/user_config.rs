@@ -380,6 +380,11 @@ pub struct GeneralConfig {
   #[serde(default = "default_bool::<false>")]
   pub focus_follows_cursor: bool,
 
+  // TODO: rename this
+  /// Whether it's possible to use the mouse anywhere on window to move or resize it.
+  #[serde(default = "default_bool::<true>")]
+  pub alt_snap: bool,
+
   /// Whether to switch back and forth between the previously focused
   /// workspace when focusing the current workspace.
   #[serde(default = "default_bool::<true>")]
