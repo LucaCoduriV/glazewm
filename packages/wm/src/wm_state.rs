@@ -1,5 +1,5 @@
 use std::{collections::HashSet, time::Instant};
-
+use std::sync::atomic::{AtomicBool, AtomicI32};
 use anyhow::Context;
 use tokio::sync::mpsc::{self};
 use tracing::warn;
@@ -62,6 +62,15 @@ pub struct WmState {
 
   /// Sender for gracefully shutting down the WM.
   exit_tx: mpsc::UnboundedSender<()>,
+
+  pub alt_snap: AltSnap,
+}
+
+#[derive(Default)]
+pub struct AltSnap{
+  pub old_mouse_position: Option<Point>,
+  pub is_currently_moving: bool,
+  pub last_move_time: Option<Instant>,
 }
 
 pub struct PendingSync {
@@ -101,6 +110,7 @@ impl WmState {
       has_initialized: false,
       event_tx,
       exit_tx,
+      alt_snap: AltSnap::default(),
     }
   }
 

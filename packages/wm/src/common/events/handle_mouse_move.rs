@@ -1,22 +1,33 @@
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::{
+  sync::atomic::{AtomicBool, AtomicI32, Ordering},
+  time::{Duration, Instant},
+};
 
 use anyhow::Context;
 use tracing::info;
-use windows::Win32::UI::Input::KeyboardAndMouse::VK_LWIN;
+use windows::Win32::{
+  Foundation::HWND,
+  UI::{
+    Input::KeyboardAndMouse::VK_LWIN,
+    WindowsAndMessaging::{SetWindowPos, SWP_NOSIZE, SWP_NOZORDER},
+  },
+};
+use windows::Win32::Foundation::RECT;
+use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
+use windows::Win32::UI::WindowsAndMessaging::SWP_ASYNCWINDOWPOS;
 use crate::{
   common::{
     platform::{MouseMoveEvent, Platform},
-    Point,
+    Direction, Point, Rect,
   },
   containers::{commands::set_focused_descendant, traits::CommonGetters},
-  user_config::UserConfig,
+  user_config::{FloatingStateConfig, UserConfig},
+  windows::{
+    commands::update_window_state, traits::WindowGetters, ActiveDrag,
+    WindowState,
+  },
   wm_state::WmState,
 };
-use crate::common::{Direction, Rect};
-use crate::user_config::FloatingStateConfig;
-use crate::windows::traits::WindowGetters;
-use crate::windows::{ActiveDrag, WindowState};
-use crate::windows::commands::update_window_state;
 
 pub fn handle_mouse_move(
   event: MouseMoveEvent,
@@ -29,33 +40,62 @@ pub fn handle_mouse_move(
 }
 
 // TODO: add these statics into the state instead
-static MOUSE_X_POSITION: AtomicI32 = AtomicI32::new(i32::MAX);
-static MOUSE_Y_POSITION: AtomicI32 = AtomicI32::new(i32::MAX);
-static ALREADY_SET: AtomicBool = AtomicBool::new(false);
 fn handle_alt_snap(
   event: MouseMoveEvent,
   state: &mut WmState,
   config: &UserConfig,
 ) -> anyhow::Result<()> {
-  let old_mouse_x_positon = MOUSE_X_POSITION.load(Ordering::SeqCst);
-  let old_mouse_y_positon = MOUSE_Y_POSITION.load(Ordering::SeqCst);
-
   if Platform::is_key_pressed(VK_LWIN) && event.is_mouse_down {
-    let delta_x = event.point.x - old_mouse_x_positon;
-    let delta_y = event.point.y - old_mouse_y_positon;
+    // let old_instant =
+    //   state.alt_snap.last_move_time.get_or_insert(Instant::now());
+    //
+    // if old_instant.elapsed() <= Duration::from_millis(10) {
+    //   return Ok(());
+    // } else {
+    //   state.alt_snap.last_move_time = None;
+    // }
 
+    let old_mouse_pos = state
+      .alt_snap
+      .old_mouse_position
+      .clone()
+      .unwrap_or(event.point.clone());
+
+    let delta_mouse_pos = Point {
+      x: event.point.x - old_mouse_pos.x,
+      y: event.point.y - old_mouse_pos.y,
+    };
 
     let native_window = Platform::window_from_point(&event.point)?;
 
-    let frame = native_window.refresh_frame_position()?;
     let window = state
       .window_from_native(&native_window)
       .context("window could not be found")?;
 
-    let frame = frame.translate_in_direction(&Direction::Right, delta_x);
-    let frame = frame.translate_in_direction(&Direction::Down, delta_y);
 
-    if !ALREADY_SET.load(Ordering::SeqCst) {
+    let mut rect = RECT::default();
+
+     unsafe {
+      DwmGetWindowAttribute(
+        HWND(native_window.handle),
+        DWMWA_EXTENDED_FRAME_BOUNDS,
+        &mut rect as *mut _ as _,
+        std::mem::size_of::<RECT>() as u32,
+      )?;
+    }
+    let frame = Rect::from_ltrb(
+      rect.left,
+      rect.top,
+      rect.right,
+      rect.bottom,
+    );
+
+    let frame =
+      frame.translate_in_direction(&Direction::Right, delta_mouse_pos.x);
+    let frame =
+      frame.translate_in_direction(&Direction::Down, delta_mouse_pos.y);
+
+    if !state.alt_snap.is_currently_moving {
       update_window_state(
         window,
         WindowState::Floating(FloatingStateConfig {
@@ -67,26 +107,38 @@ fn handle_alt_snap(
       )?;
     }
 
-
-    info!("{:?}", &frame);
-
     let window = state
-        .window_from_native(&native_window)
-        .context("window could not be found")?;
-    
-    window.set_floating_placement(frame);
+      .window_from_native(&native_window)
+      .context("window could not be found")?;
+
+    window.set_floating_placement(frame.clone());
 
     // window.set_active_drag(Some(ActiveDrag {
     //   operation: None,
     //   is_from_tiling: window.is_tiling_window(),
     // }));
-    ALREADY_SET.store(true, Ordering::SeqCst);
-    state.pending_sync.focus_change = true;
-    state.pending_sync.containers_to_redraw.push(window.into());
+    state.alt_snap.is_currently_moving = true;
+
+    // TODO: refactor this. Using windows call directly removes some of stutters
+    unsafe {
+      SetWindowPos(
+        HWND(native_window.handle),
+        HWND::default(),
+        frame.x(),
+        frame.y(),
+        0,
+        0,
+        SWP_NOSIZE | SWP_NOZORDER | SWP_ASYNCWINDOWPOS,
+      )?;
+    }
+    // state.pending_sync.focus_change = true;
+    // state.pending_sync.containers_to_redraw.push(window.into());
   }
 
-  MOUSE_X_POSITION.store(event.point.x, Ordering::SeqCst);
-  MOUSE_Y_POSITION.store(event.point.y, Ordering::SeqCst);
+  state.alt_snap.old_mouse_position = Some(Point {
+    x: event.point.x,
+    y: event.point.y,
+  });
   Ok(())
 }
 
