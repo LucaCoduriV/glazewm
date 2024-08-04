@@ -14,7 +14,7 @@ use windows::Win32::{
 };
 use windows::Win32::Foundation::RECT;
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
-use windows::Win32::UI::WindowsAndMessaging::SWP_ASYNCWINDOWPOS;
+use windows::Win32::UI::WindowsAndMessaging::{SWP_ASYNCWINDOWPOS, SWP_NOSENDCHANGING};
 use crate::{
   common::{
     platform::{MouseMoveEvent, Platform},
@@ -87,10 +87,10 @@ pub fn handle_alt_snap(
       rect.bottom,
     );
 
-    let frame =
-      frame.translate_in_direction(&Direction::Right, delta_mouse_pos.x);
-    let frame =
-      frame.translate_in_direction(&Direction::Down, delta_mouse_pos.y);
+    // let frame =
+    //   frame.translate_in_direction(&Direction::Right, delta_mouse_pos.x);
+    // let frame =
+    //   frame.translate_in_direction(&Direction::Down, delta_mouse_pos.y);
 
     // if !state.alt_snap.is_currently_moving {
     //   update_window_state(
@@ -121,15 +121,16 @@ pub fn handle_alt_snap(
       SetWindowPos(
         HWND(native_window.handle),
         HWND::default(),
-        frame.x(),
-        frame.y(),
+        event.point.x - 500,
+        event.point.y - 500,
         0,
         0,
-        SWP_NOSIZE | SWP_NOZORDER,
+        SWP_NOSIZE | SWP_NOZORDER | SWP_NOSENDCHANGING | SWP_ASYNCWINDOWPOS,
       )?;
     }
     // state.pending_sync.focus_change = true;
     // state.pending_sync.containers_to_redraw.push(window.into());
+
   }
 
   state.old_mouse_position = Some(Point {

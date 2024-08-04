@@ -6,7 +6,7 @@
 #![feature(once_cell_try)]
 
 use std::{env, path::PathBuf, thread};
-
+use std::time::Instant;
 use anyhow::{Context, Error, Result};
 use tokio::{process::Command, signal};
 use tracing::{debug, error, info, warn, Level};
@@ -132,6 +132,7 @@ async fn start_wm(
 
     while let Ok(event) = thread_event_rx.recv() {
       if let PlatformEvent::MouseMove(mouse_move) = event {
+        // info!("{:?}", &mouse_move.point);
         handle_alt_snap(mouse_move, &mut alt_snap);
       }else{}
     }
