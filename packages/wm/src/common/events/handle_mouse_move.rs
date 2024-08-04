@@ -6,15 +6,17 @@ use std::{
 use anyhow::Context;
 use tracing::info;
 use windows::Win32::{
-  Foundation::HWND,
+  Foundation::{HWND, RECT},
+  Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS},
   UI::{
     Input::KeyboardAndMouse::VK_LWIN,
-    WindowsAndMessaging::{SetWindowPos, SWP_NOSIZE, SWP_NOZORDER},
+    WindowsAndMessaging::{
+      SetWindowPos, SWP_ASYNCWINDOWPOS, SWP_NOSENDCHANGING, SWP_NOSIZE,
+      SWP_NOZORDER,
+    },
   },
 };
-use windows::Win32::Foundation::RECT;
-use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
-use windows::Win32::UI::WindowsAndMessaging::{SWP_ASYNCWINDOWPOS, SWP_NOSENDCHANGING};
+
 use crate::{
   common::{
     platform::{MouseMoveEvent, Platform},
@@ -26,9 +28,8 @@ use crate::{
     commands::update_window_state, traits::WindowGetters, ActiveDrag,
     WindowState,
   },
-  wm_state::WmState,
+  wm_state::{AltSnap, WmState},
 };
-use crate::wm_state::AltSnap;
 
 pub fn handle_mouse_move(
   event: MouseMoveEvent,
@@ -43,7 +44,8 @@ pub fn handle_alt_snap(
   event: MouseMoveEvent,
   state: &mut AltSnap,
 ) -> anyhow::Result<()> {
-  if Platform::is_key_pressed(VK_LWIN) && event.is_mouse_down {
+  // if Platform::is_key_pressed(VK_LWIN) && event.is_mouse_down {
+  if event.is_mouse_down {
     // let old_instant =
     //   state.alt_snap.last_move_time.get_or_insert(Instant::now());
     //
@@ -69,10 +71,9 @@ pub fn handle_alt_snap(
     //   .window_from_native(&native_window)
     //   .context("window could not be found")?;
 
-
     let mut rect = RECT::default();
 
-     unsafe {
+    unsafe {
       DwmGetWindowAttribute(
         HWND(native_window.handle),
         DWMWA_EXTENDED_FRAME_BOUNDS,
@@ -80,16 +81,12 @@ pub fn handle_alt_snap(
         std::mem::size_of::<RECT>() as u32,
       )?;
     }
-    let frame = Rect::from_ltrb(
-      rect.left,
-      rect.top,
-      rect.right,
-      rect.bottom,
-    );
+    let frame =
+      Rect::from_ltrb(rect.left, rect.top, rect.right, rect.bottom);
 
     // let frame =
-    //   frame.translate_in_direction(&Direction::Right, delta_mouse_pos.x);
-    // let frame =
+    //   frame.translate_in_direction(&Direction::Right,
+    // delta_mouse_pos.x); let frame =
     //   frame.translate_in_direction(&Direction::Down, delta_mouse_pos.y);
 
     // if !state.alt_snap.is_currently_moving {
@@ -116,7 +113,8 @@ pub fn handle_alt_snap(
     // }));
     state.is_currently_moving = true;
 
-    // TODO: refactor this. Using windows call directly removes some of stutters
+    // TODO: refactor this. Using windows call directly removes some of
+    // stutters
     unsafe {
       SetWindowPos(
         HWND(native_window.handle),
@@ -125,12 +123,14 @@ pub fn handle_alt_snap(
         event.point.y - 500,
         0,
         0,
-        SWP_NOSIZE | SWP_NOZORDER | SWP_NOSENDCHANGING | SWP_ASYNCWINDOWPOS,
+        SWP_NOSIZE
+          | SWP_NOZORDER
+          | SWP_NOSENDCHANGING
+          | SWP_ASYNCWINDOWPOS,
       )?;
     }
     // state.pending_sync.focus_change = true;
     // state.pending_sync.containers_to_redraw.push(window.into());
-
   }
 
   state.old_mouse_position = Some(Point {
