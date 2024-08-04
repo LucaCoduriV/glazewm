@@ -35,6 +35,7 @@ pub struct MouseMoveEvent {
 
 pub struct EventListener {
   pub event_rx: UnboundedReceiver<PlatformEvent>,
+  pub event_thread_rx: Option<std::sync::mpsc::Receiver<PlatformEvent>>,
   event_window: EventWindow,
 }
 
@@ -44,15 +45,18 @@ impl EventListener {
   /// Returns an instance of `EventListener`.
   pub fn start(config: &UserConfig) -> anyhow::Result<Self> {
     let (event_tx, event_rx) = mpsc::unbounded_channel();
+    let (event_thread_tx, event_thread_rx) = std::sync::mpsc::channel();
 
     let event_window = EventWindow::new(
       event_tx,
+      event_thread_tx,
       &config.value.keybindings,
       config.value.general.focus_follows_cursor || config.value.general.alt_snap,
     )?;
 
     Ok(Self {
       event_rx,
+      event_thread_rx: Some(event_thread_rx),
       event_window,
     })
   }

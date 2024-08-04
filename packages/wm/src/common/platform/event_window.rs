@@ -40,6 +40,8 @@ use crate::{common::Point, user_config::KeybindingConfig};
 /// For use with window procedure.
 static PLATFORM_EVENT_TX: OnceLock<mpsc::UnboundedSender<PlatformEvent>> =
   OnceLock::new();
+static PLATFORM_EVENT_THREAD_TX: OnceLock<std::sync::mpsc::Sender<PlatformEvent>> =
+  OnceLock::new();
 
 /// Whether mouse hook is currently enabled.
 ///
@@ -75,6 +77,7 @@ impl EventWindow {
   /// ever be instantiated once in the application's lifetime.
   pub fn new(
     event_tx: mpsc::UnboundedSender<PlatformEvent>,
+    event_thread_tx: std::sync::mpsc::Sender<PlatformEvent>,
     keybindings: &Vec<KeybindingConfig>,
     enable_mouse_events: bool,
   ) -> anyhow::Result<Self> {
@@ -84,6 +87,10 @@ impl EventWindow {
 
     // Add the sender for platform events to global state.
     PLATFORM_EVENT_TX.set(event_tx.clone()).map_err(|_| {
+      anyhow::anyhow!("Platform event sender already set.")
+    })?;
+
+    PLATFORM_EVENT_THREAD_TX.set(event_thread_tx.clone()).map_err(|_| {
       anyhow::anyhow!("Platform event sender already set.")
     })?;
 
@@ -174,25 +181,27 @@ pub extern "system" fn event_window_proc(
   lparam: LPARAM,
 ) -> LRESULT {
   if let Some(event_tx) = PLATFORM_EVENT_TX.get() {
-    return match message {
-      WM_DISPLAYCHANGE | WM_SETTINGCHANGE | WM_DEVICECHANGE => {
-        if let Err(err) =
-          handle_display_change_msg(message, wparam, event_tx)
-        {
-          warn!("Failed to handle display change message: {}", err);
-        }
+    if let Some(event_thread_tx) = PLATFORM_EVENT_THREAD_TX.get() {
+      return match message {
+        WM_DISPLAYCHANGE | WM_SETTINGCHANGE | WM_DEVICECHANGE => {
+          if let Err(err) =
+              handle_display_change_msg(message, wparam, event_tx)
+          {
+            warn!("Failed to handle display change message: {}", err);
+          }
 
-        LRESULT(0)
-      }
-      WM_INPUT if ENABLE_MOUSE_EVENTS.load(Ordering::Relaxed) => {
-        if let Err(err) = handle_input_msg(wparam, lparam, event_tx) {
-          warn!("Failed to handle input message: {}", err);
+          LRESULT(0)
         }
+        WM_INPUT if ENABLE_MOUSE_EVENTS.load(Ordering::Relaxed) => {
+          if let Err(err) = handle_input_msg(wparam, lparam, event_tx, event_thread_tx) {
+            warn!("Failed to handle input message: {}", err);
+          }
 
-        LRESULT(0)
-      }
-      _ => unsafe { DefWindowProcW(handle, message, wparam, lparam) },
-    };
+          LRESULT(0)
+        }
+        _ => unsafe { DefWindowProcW(handle, message, wparam, lparam) },
+      };
+    }
   }
 
   LRESULT(0)
@@ -227,6 +236,7 @@ fn handle_input_msg(
   _wparam: WPARAM,
   lparam: LPARAM,
   event_tx: &mpsc::UnboundedSender<PlatformEvent>,
+  event_thread_tx: &std::sync::mpsc::Sender<PlatformEvent>,
 ) -> anyhow::Result<()> {
   let mut raw_input: RAWINPUT = unsafe { std::mem::zeroed() };
   let mut raw_input_size = std::mem::size_of::<RAWINPUT>() as u32;
@@ -298,6 +308,15 @@ fn handle_input_msg(
     },
     is_mouse_down,
   }))?;
+  
+  event_thread_tx.send(PlatformEvent::MouseMove(MouseMoveEvent {
+    point: Point {
+      x: point.x,
+      y: point.y,
+    },
+    is_mouse_down,
+  }))?;
+  
 
   LAST_MOUSE_EVENT_TIME.store(event_time, Ordering::Relaxed);
 

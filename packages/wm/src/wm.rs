@@ -45,6 +45,14 @@ impl WindowManager {
     })
   }
 
+  pub fn process_event_thread(
+    &mut self,
+    event: PlatformEvent,
+    config: &mut UserConfig,
+  ) -> anyhow::Result<()> {
+    Ok(())
+  }
+
   pub fn process_event(
     &mut self,
     event: PlatformEvent,

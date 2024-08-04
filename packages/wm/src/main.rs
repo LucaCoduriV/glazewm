@@ -5,7 +5,7 @@
 #![feature(iterator_try_collect)]
 #![feature(once_cell_try)]
 
-use std::{env, path::PathBuf};
+use std::{env, path::PathBuf, thread};
 
 use anyhow::{Context, Error, Result};
 use tokio::{process::Command, signal};
@@ -14,17 +14,18 @@ use tracing_subscriber::{
   fmt::{self, writer::MakeWriterExt},
   layer::SubscriberExt,
 };
-
 use crate::{
   app_command::{AppCommand, InvokeCommand, Verbosity},
-  common::platform::Platform,
+  common::{events::handle_alt_snap, platform::Platform},
   ipc_client::IpcClient,
   ipc_server::{ClientResponseData, IpcServer},
   sys_tray::SystemTray,
   user_config::UserConfig,
   wm::WindowManager,
   wm_event::WmEvent,
+  wm_state::AltSnap,
 };
+use crate::common::platform::PlatformEvent;
 
 mod app_command;
 mod cleanup;
@@ -122,6 +123,19 @@ async fn start_wm(
   // Run startup commands.
   let startup_commands = config.value.general.startup_commands.clone();
   wm.process_commands(startup_commands, None, &mut config)?;
+
+  let thread_event_rx =
+    event_listener.event_thread_rx.take().context("NO recv")?;
+
+  let join_handle = thread::spawn(move || {
+    let mut alt_snap = AltSnap::default();
+
+    while let Ok(event) = thread_event_rx.recv() {
+      if let PlatformEvent::MouseMove(mouse_move) = event {
+        handle_alt_snap(mouse_move, &mut alt_snap);
+      }else{}
+    }
+  });
 
   loop {
     let res = tokio::select! {

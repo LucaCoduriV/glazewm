@@ -28,22 +28,20 @@ use crate::{
   },
   wm_state::WmState,
 };
+use crate::wm_state::AltSnap;
 
 pub fn handle_mouse_move(
   event: MouseMoveEvent,
   state: &mut WmState,
   config: &UserConfig,
 ) -> anyhow::Result<()> {
-  handle_alt_snap(event.clone(), state, config)?;
-
   handle_focus_on_hover(event, state, config)
 }
 
 // TODO: add these statics into the state instead
-fn handle_alt_snap(
+pub fn handle_alt_snap(
   event: MouseMoveEvent,
-  state: &mut WmState,
-  config: &UserConfig,
+  state: &mut AltSnap,
 ) -> anyhow::Result<()> {
   if Platform::is_key_pressed(VK_LWIN) && event.is_mouse_down {
     // let old_instant =
@@ -56,7 +54,6 @@ fn handle_alt_snap(
     // }
 
     let old_mouse_pos = state
-      .alt_snap
       .old_mouse_position
       .clone()
       .unwrap_or(event.point.clone());
@@ -68,9 +65,9 @@ fn handle_alt_snap(
 
     let native_window = Platform::window_from_point(&event.point)?;
 
-    let window = state
-      .window_from_native(&native_window)
-      .context("window could not be found")?;
+    // let window = state
+    //   .window_from_native(&native_window)
+    //   .context("window could not be found")?;
 
 
     let mut rect = RECT::default();
@@ -95,29 +92,29 @@ fn handle_alt_snap(
     let frame =
       frame.translate_in_direction(&Direction::Down, delta_mouse_pos.y);
 
-    if !state.alt_snap.is_currently_moving {
-      update_window_state(
-        window,
-        WindowState::Floating(FloatingStateConfig {
-          centered: false,
-          shown_on_top: true,
-        }),
-        state,
-        config,
-      )?;
-    }
+    // if !state.alt_snap.is_currently_moving {
+    //   update_window_state(
+    //     window,
+    //     WindowState::Floating(FloatingStateConfig {
+    //       centered: false,
+    //       shown_on_top: true,
+    //     }),
+    //     state,
+    //     config,
+    //   )?;
+    // }
 
-    let window = state
-      .window_from_native(&native_window)
-      .context("window could not be found")?;
+    // let window = state
+    //   .window_from_native(&native_window)
+    //   .context("window could not be found")?;
 
-    window.set_floating_placement(frame.clone());
+    // window.set_floating_placement(frame.clone());
 
     // window.set_active_drag(Some(ActiveDrag {
     //   operation: None,
     //   is_from_tiling: window.is_tiling_window(),
     // }));
-    state.alt_snap.is_currently_moving = true;
+    state.is_currently_moving = true;
 
     // TODO: refactor this. Using windows call directly removes some of stutters
     unsafe {
@@ -128,14 +125,14 @@ fn handle_alt_snap(
         frame.y(),
         0,
         0,
-        SWP_NOSIZE | SWP_NOZORDER | SWP_ASYNCWINDOWPOS,
+        SWP_NOSIZE | SWP_NOZORDER,
       )?;
     }
     // state.pending_sync.focus_change = true;
     // state.pending_sync.containers_to_redraw.push(window.into());
   }
 
-  state.alt_snap.old_mouse_position = Some(Point {
+  state.old_mouse_position = Some(Point {
     x: event.point.x,
     y: event.point.y,
   });
