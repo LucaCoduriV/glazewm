@@ -156,8 +156,8 @@ impl Platform {
     })
   }
 
-  pub fn is_key_pressed(key: u16) -> bool {
-    let key_state = unsafe { GetAsyncKeyState(key as i32) };
+  pub fn is_key_pressed(virtual_key: VIRTUAL_KEY) -> bool {
+    let key_state = unsafe { GetAsyncKeyState(virtual_key.0 as i32) };
     // Check if the most significant bit is set (indicating the key is
     // pressed)
     key_state as u16 & 0x8000 != 0
